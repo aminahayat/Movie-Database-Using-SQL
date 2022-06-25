@@ -1,125 +1,132 @@
-const express = require('express');
-// Import and require mysql2
-const mysql = require('mysql2');
+const express = require("express");
+const mysql = require("mysql2");
 
-const PORT = process.env.PORT || 3001;
 const app = express();
 
-// Express middleware
-app.use(express.urlencoded({ extended: false }));
-app.use(express.json());
+const port = process.env.PORT || 3001;
 
-// Connect to database
 const db = mysql.createConnection(
   {
-    host: 'localhost',
-    // MySQL username,
-    user: 'root',
-    // TODO: Add MySQL password here
-    password: '',
-    database: 'movies_db'
+    host: "localhost",
+    user: "root",
+    password: "",
+    database: "the_best_database",
   },
-  console.log(`Connected to the movies_db database.`)
+  console.log("Connected to Databse the_best_database")
 );
 
-// Create a movie
-app.post('/api/new-movie', ({ body }, res) => {
-  const sql = `INSERT INTO movies (movie_name)
-    VALUES (?)`;
-  const params = [body.movie_name];
-  
-  db.query(sql, params, (err, result) => {
-    if (err) {
-      res.status(400).json({ error: err.message });
-      return;
-    }
-    res.json({
-      message: 'success',
-      data: body
-    });
-  });
-});
+app.use(express.json());
+app.use(express.urlencoded({ extended: false }));
 
-// Read all movies
-app.get('/api/movies', (req, res) => {
-  const sql = `SELECT id, movie_name AS title FROM movies`;
-  
-  db.query(sql, (err, rows) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-       return;
-    }
-    res.json({
-      message: 'success',
-      data: rows
-    });
-  });
-});
+// It's done when the /api/movies route renders a list of all movies.
+app.get("/api/movies", (request, response) => {
+  console.log("Incomming GET request to /api/movies");
 
-// Delete a movie
-app.delete('/api/movie/:id', (req, res) => {
-  const sql = `DELETE FROM movies WHERE id = ?`;
-  const params = [req.params.id];
-  
-  db.query(sql, params, (err, result) => {
+  db.query("SELECT * FROM movies;", (err, result) => {
     if (err) {
-      res.statusMessage(400).json({ error: res.message });
-    } else if (!result.affectedRows) {
-      res.json({
-      message: 'Movie not found'
-      });
+      response.status(500).send("Something went wrong");
     } else {
-      res.json({
-        message: 'deleted',
-        changes: result.affectedRows,
-        id: req.params.id
-      });
+      response.status(200).json(result);
     }
   });
 });
 
-// Read list of all reviews and associated movie name using LEFT JOIN
-app.get('/api/movie-reviews', (req, res) => {
-  const sql = `SELECT movies.movie_name AS movie, reviews.review FROM reviews LEFT JOIN movies ON reviews.movie_id = movies.id ORDER BY movies.movie_name;`;
-  db.query(sql, (err, rows) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
+// It's done when the /api/add-movie route successfully adds a movie when tested using Insomnia.
+app.post("/api/add-movie", (request, response) => {
+  console.log("Incomming POST request to /api/add-movie", request.body);
+  const { movie_name } = request.body;
+
+  if (!movie_name) {
+    response.send("Please supply a valid movie_name property");
+  }
+
+  // Add it to SQL database
+  db.query(
+    "INSERT INTO movies (movie_name) VALUES (?)",
+    movie_name,
+    (err, result) => {
+      if (err) {
+        response.status(500).send("Error adding movie");
+      } else {
+        if (result.affectedRows === 1) {
+          response.status(201).json({
+            status: "success",
+            body: request.body,
+          });
+        } else {
+          response.status(500).send("Unable to create new movie record");
+        }
+      }
     }
-    res.json({
-      message: 'success',
-      data: rows
-    });
-  });
+  );
 });
 
-// BONUS: Update review name
-app.put('/api/review/:id', (req, res) => {
-  const sql = `UPDATE reviews SET review = ? WHERE id = ?`;
-  const params = [req.body.review, req.params.id];
+app.get("/api/reviews", (request, response) => {
+  console.log("Incomming GET request to /api/reviews");
 
-  db.query(sql, params, (err, result) => {
+  db.query("SELECT * FROM reviews;", (err, result) => {
     if (err) {
-      res.status(400).json({ error: err.message });
-    } else if (!result.affectedRows) {
-      res.json({
-        message: 'Movie not found'
-      });
+      response.status(500).send("Something went wrong");
     } else {
-      res.json({
-        message: 'success',
-        data: req.body,
-        changes: result.affectedRows
-      });
+      response.status(200).json(result);
     }
   });
 });
 
-// Default response for any other request (Not Found)
-app.use((req, res) => {
-  res.status(404).end();
+// It's done when the /api/update-review route successfully updates a movie when tested using Insomnia.
+app.post("/api/update-review", (request, response) => {
+  console.log("Incomming POST request to /api/update-review", request.body);
+  const { id, review } = request.body;
+  if (!id || !review) {
+    response.send(
+      'Please supply a valid review object with an "id" and "review" properties'
+    );
+  }
+
+  db.query(
+    "INSERT INTO reviews (movie_id, review) VALUES (?, ?)",
+    [id, review],
+    (error, results) => {
+      if (error) {
+        response
+          .status(500)
+          .send(`Error adding review for movie with id = ${id}`);
+        console.log(error);
+      } else {
+        console.log(results);
+        response.status(201).json({
+          status: "success",
+          body: request.body,
+        });
+      }
+    }
+  );
 });
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+// It's done when the /api/movie/:id route deletes a route when tested using Insomnia.
+app.delete("/api/movie/:id", (request, response) => {
+  const { id } = request.params;
+  console.log("Incomming DELETE request to /api/movie with id:", id);
+
+  // talking to db and deleting record there
+  db.query("DELETE from movies WHERE id = ?", id, (error, result) => {
+    console.log(error, result);
+    if (error) {
+      response.status(500).send("Error deleting a record");
+    } else {
+      if (result.affectedRows === 1) {
+        response.status(204).json({
+          status: "success",
+        });
+      } else {
+        response
+          .status(500)
+          .send("No records were deleted. Please check the movie id exists.");
+      }
+    }
+  });
+});
+
+app.listen(port, () => {
+  console.log("Server running on port", port, "🚀");
 });
